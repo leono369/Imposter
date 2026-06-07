@@ -483,8 +483,8 @@ function renderRevealDone(){
 
 var rolesShown=false;
 function openScore(){rolesShown=false;save();go("score");renderScore();}
-function adjust(i,d){state.scores[i]=Math.max(0,(state.scores[i]||0)+d);save();renderScore();}
-function setScore(i,v){var n=parseInt(v,10);state.scores[i]=isNaN(n)?0:Math.max(0,n);save();renderScore();}
+function adjust(i,d){state.scores[i]=Math.min(WIN,Math.max(0,(state.scores[i]||0)+d));save();renderScore();}
+function setScore(i,v){var n=parseInt(v,10);state.scores[i]=isNaN(n)?0:Math.min(WIN,Math.max(0,n));save();renderScore();}
 function toggleRoles(){rolesShown=!rolesShown;renderScore();}
 function endRoom(){if(confirm("Spielzimmer wirklich beenden? Punkte gehen verloren.")){clearSession();go("menu");renderResume();}}
 
