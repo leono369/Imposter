@@ -149,6 +149,16 @@ body{
 .sbtn{flex:0 0 auto;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--card-2);color:var(--text);font-family:'Anton';font-size:14px;cursor:pointer;padding:0 10px;}
 .sbtn.plus{color:var(--accent);}.sbtn.minus{color:var(--muted);padding:0 12px;}
 .scoreActions{margin-top:22px;display:flex;flex-direction:column;gap:11px;}
+
+/* ===== GEWINNER-OVERLAY ===== */
+.confetti-canvas{position:fixed;inset:0;z-index:999;pointer-events:none;}
+.winner-overlay{position:fixed;inset:0;z-index:1000;background:rgba(13,13,12,.85);display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(6px);}
+.winner-card{background:linear-gradient(160deg,var(--card-2),var(--card));border:1px solid rgba(200,224,0,.45);border-radius:var(--r-lg);padding:38px 28px 28px;text-align:center;max-width:380px;width:100%;box-shadow:0 30px 70px -20px rgba(0,0,0,.9),0 0 60px -20px rgba(200,224,0,.25);animation:pop .45s ease;}
+@keyframes pop{from{opacity:0;transform:scale(.7);}60%{transform:scale(1.05);}to{opacity:1;transform:scale(1);}}
+.winner-trophy{font-size:72px;line-height:1;margin-bottom:14px;animation:trophyBounce .9s ease .4s both;}
+@keyframes trophyBounce{from{transform:translateY(-20px);opacity:0;}60%{transform:translateY(6px);}to{transform:translateY(0);opacity:1;}}
+.winner-name{font-family:'Anton';font-size:clamp(32px,9vw,52px);text-transform:uppercase;color:var(--accent);letter-spacing:.04em;line-height:1.05;word-break:break-word;}
+.winner-sub{color:var(--muted);font-size:15px;margin:8px 0 26px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;}
 </style>
 </head>
 <body>
@@ -201,14 +211,14 @@ body{
       <div class="steps">
         <div class="step"><p>Karten verteilen — jeder sieht heimlich seine Rolle &amp; seinen Begriff.</p></div>
         <div class="step"><p>Eine Zahl von 1–20 wird gezogen: das ist der Begriff der Runde.</p></div>
-        <div class="step"><p>Reihum gibt jeder <b>einen Hinweis</b> zu seinem Begriff — 2 bis 3 Runden lang.</p></div>
+        <div class="step"><p>Reihum gibt jeder <b>einen Hinweis</b> zu seinem Begriff. Sobald alle einmal dran waren, ist eine Runde vorbei — 2 bis 3 Runden gesamt.</p></div>
         <div class="step"><p>Diskutieren &amp; abstimmen: Wer ist der Imposter?</p></div>
-        <div class="step"><p>Rollen aufdecken — dann trägt <b>eine Person aus der Runde</b> die Punkte für alle ein. Sieg bei 14 Punkten.</p></div>
+        <div class="step"><p>Wenn alle Hinweis-Runden gespielt wurden: Die Person, die das Handy hält, öffnet die Auswertung und trägt die Punkte für alle ein. Sieg bei 14 Punkten.</p></div>
       </div>
     </div>
     <div class="block">
       <h3>So spielt ihr's <span class="o">digital</span></h3>
-      <p>Ein <b>Spielzimmer</b> merkt sich eure Namen und Punkte rundenübergreifend. Ihr spielt am <b>selben Handy</b> (Pass &amp; Play): Karten gehen reihum, jeder deckt seine eigene heimlich auf. Nach der Diskussion öffnet <b>eine Person</b> die Auswertung, deckt alle Rollen auf und tippt die Punkte für alle ein — egal ob per Eingabefeld oder mit den Schnell-Buttons. Das Spielzimmer lässt sich jederzeit beenden oder beim nächsten Öffnen fortsetzen.</p>
+      <p>Ein <b>Spielzimmer</b> merkt sich eure Namen und Punkte rundenübergreifend. Ihr spielt am <b>selben Handy</b> (Pass &amp; Play): Karten gehen reihum, jeder deckt seine eigene heimlich auf. Sobald alle Hinweis-Runden gespielt wurden, öffnet die Person, die das Handy <b>gerade hält</b>, mit dem Button „Fertig — zur Auswertung" die Punkteverteilung und tippt die Punkte für alle ein — per Eingabefeld oder mit den Schnell-Buttons. Das Spielzimmer lässt sich jederzeit beenden oder beim nächsten Öffnen fortsetzen.</p>
     </div>
     <div class="block">
       <h3>Die <span class="v">Rollen</span></h3>
@@ -253,6 +263,20 @@ body{
 
 </div>
 
+<!-- KONFETTI-CANVAS -->
+<canvas id="confettiCanvas" class="confetti-canvas" style="display:none"></canvas>
+
+<!-- GEWINNER-OVERLAY -->
+<div id="winnerOverlay" class="winner-overlay" style="display:none">
+  <div class="winner-card">
+    <div class="winner-trophy">🏆</div>
+    <div class="winner-name" id="winnerName"></div>
+    <div class="winner-sub">gewinnt das Spiel!</div>
+    <button class="btn btn-primary" style="width:100%" onclick="closeWinnerOverlay()">Ergebnis ansehen</button>
+    <button class="btn btn-line" style="width:100%;margin-top:10px" onclick="endRoom()">Spielzimmer beenden</button>
+  </div>
+</div>
+
 <script>
 var CATEGORIES=[
   {id:"alltag",name:"Alltag",words:["Backofen","nass","Ball","Pony","Kreuz","UFO","Traum","Schlüssel","Brücke","Pfeil","Tinte","Feuer","Messe","Stuhl","Selfie-Stick","Aquarium","Konzert","Matcha Latte","Französisch","Schrank"]},
@@ -273,6 +297,68 @@ function roleColor(r){return r==="imposter"?"var(--accent)":(r==="crew"?"var(--m
 
 var state={players:5,names:[],roles:{saboteur:true,senior:false,doppelagent:false},category:"alltag",scores:[],round:0};
 var round=[],idx=0,theNum=0;
+var winnerShown=false;
+
+/* ---- Konfetti ---- */
+var confettiRAF=null;
+function launchConfetti(){
+  var canvas=document.getElementById("confettiCanvas");
+  canvas.style.display="block";
+  canvas.width=window.innerWidth;canvas.height=window.innerHeight;
+  var ctx=canvas.getContext("2d");
+  var colors=["#C8E000","#7B5CE6","#F3F3EC","#ffffff","#5B3E96","#a0c000"];
+  var shapes=[];
+  for(var i=0;i<90;i++){
+    shapes.push({
+      x:Math.random()*canvas.width,
+      y:-10-Math.random()*canvas.height*0.4,
+      w:7+Math.random()*9,
+      h:4+Math.random()*6,
+      color:colors[Math.floor(Math.random()*colors.length)],
+      rot:Math.random()*Math.PI*2,
+      vx:(Math.random()-0.5)*3,
+      vy:2.5+Math.random()*3,
+      vr:(Math.random()-0.5)*0.18,
+      circle:Math.random()<0.3
+    });
+  }
+  var start=null;
+  var dur=4200;
+  function frame(ts){
+    if(!start)start=ts;
+    var prog=ts-start;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    var alive=false;
+    shapes.forEach(function(s){
+      s.x+=s.vx;s.y+=s.vy;s.rot+=s.vr;s.vy+=0.05;
+      if(s.y<canvas.height+20)alive=true;
+      ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.rot);
+      ctx.fillStyle=s.color;
+      if(s.circle){ctx.beginPath();ctx.arc(0,0,s.w/2,0,Math.PI*2);ctx.fill();}
+      else{ctx.fillRect(-s.w/2,-s.h/2,s.w,s.h);}
+      ctx.restore();
+    });
+    if(alive&&prog<dur){confettiRAF=requestAnimationFrame(frame);}
+    else{ctx.clearRect(0,0,canvas.width,canvas.height);canvas.style.display="none";}
+  }
+  if(confettiRAF)cancelAnimationFrame(confettiRAF);
+  confettiRAF=requestAnimationFrame(frame);
+}
+function stopConfetti(){
+  if(confettiRAF)cancelAnimationFrame(confettiRAF);
+  var canvas=document.getElementById("confettiCanvas");
+  canvas.style.display="none";
+}
+
+function showWinnerOverlay(name){
+  document.getElementById("winnerName").textContent=name;
+  document.getElementById("winnerOverlay").style.display="flex";
+  launchConfetti();
+}
+function closeWinnerOverlay(){
+  document.getElementById("winnerOverlay").style.display="none";
+  stopConfetti();
+}
 
 function maxSpecial(p){return Math.min(3,Math.max(0,p-3));}
 function chosenCount(){return Object.values(state.roles).filter(Boolean).length;}
@@ -353,8 +439,8 @@ function buildRound(){
   });
 }
 
-function startRoom(){state.scores=new Array(state.players).fill(0);state.round=1;buildRound();idx=0;save();go("reveal");renderHandoff();}
-function nextRound(){state.round++;buildRound();idx=0;save();go("reveal");renderHandoff();}
+function startRoom(){state.scores=new Array(state.players).fill(0);state.round=1;winnerShown=false;buildRound();idx=0;save();go("reveal");renderHandoff();}
+function nextRound(){state.round++;winnerShown=false;buildRound();idx=0;save();go("reveal");renderHandoff();}
 
 function renderHandoff(){
   document.getElementById("revealRound").textContent="Runde "+state.round;
@@ -390,7 +476,7 @@ function renderRevealDone(){
     '<div class="handoff">'+
       '<p class="lead-t">Alle haben ihre Karte gesehen.</p>'+
       '<div class="who">Begriff <span class="o">'+theNum+"</span></div>"+
-      '<p class="sub-t">Jetzt reihum Hinweise geben, dann diskutieren &amp; abstimmen.</p>'+
+      '<p class="sub-t">Jetzt reihum Hinweise geben (2–3 Runden). Danach diskutieren, abstimmen — und dann die Auswertung öffnen.</p>'+
       '<button class="btn btn-primary" style="width:100%" onclick="openScore()">Fertig — zur Auswertung</button>'+
     "</div>";
 }
@@ -406,6 +492,7 @@ function renderScore(){
   document.getElementById("scoreRound").textContent="Runde "+state.round;
   var max=Math.max.apply(null,state.scores);
   var winnerIdx=max>=WIN?state.scores.indexOf(max):-1;
+  if(winnerIdx>=0&&!winnerShown){winnerShown=true;showWinnerOverlay(playerName(winnerIdx));}
   var html='<p class="roomline">Spielzimmer · '+state.players+" Spieler · Sieg bei "+WIN+" Punkten</p>";
   if(winnerIdx>=0){html+='<div class="winner">🏆 '+playerName(winnerIdx)+" gewinnt!</div>";}
   html+='<button class="btn btn-line revealBtn" onclick="toggleRoles()">'+(rolesShown?"Rollen verbergen":"Rollen dieser Runde aufdecken")+"</button>";
